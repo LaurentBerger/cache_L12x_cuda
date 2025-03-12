@@ -11,6 +11,9 @@ Program results:
 
 ![rtx3090](figure_rtx3090.jpeg)
 
+![rtxada500](figure_rtxada500.jpeg)
+
+
 
 WARNING 
 
