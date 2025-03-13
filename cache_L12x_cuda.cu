@@ -7,9 +7,8 @@
 #include <cuda_runtime_api.h>
 
 #define NB_ELT 2
-#define NB_TEST 1000000ll
 #define NB_PAS_MAX 81
-#define TPS_MAX_PAR_TEST 10
+#define TPS_MAX_PAR_TEST 1
 #define MIN_CLCK 1
 
 
@@ -55,24 +54,39 @@ int main() {
 	int numberOfSMs;
 	int deviceCount = 0;
 	cudaError_t erreur;
-	cudaGetDeviceCount(&deviceCount);
 
-	cudaGetDevice(&deviceId);
-	cudaSetDevice(deviceId);
-	cudaDeviceGetAttribute(&numberOfSMs, cudaDevAttrMultiProcessorCount, deviceId);
 	size_t free, total;
-	CUresult cuRes=cuMemGetInfo(&free, &total);
+	CUdevice dev;
+	CUcontext ctx;
+	cuInit(0);
+	cuDeviceGet(&dev, 0);
+	cuCtxCreate(&ctx, 0, dev);
+	CUresult cuRes = cuMemGetInfo(&free, &total);
+	if (cuRes != 0)
+		std::cout << "Error: " << cudaGetErrorString(cudaError_t(cuRes)) << "\n";
 	erreur = cudaGetLastError();
 	if (erreur != cudaSuccess)
 		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 	std::cout << "free memory : " << free << "\n";
 	std::cout << "total memory : " << total << "\n";
 
+	cudaGetDeviceCount(&deviceCount);
 
-	int nbPas = int(std::log(std::min(int(free / 48), int(pow(2.0, NB_PAS_MAX / 3.0)))) / std::log(2))*3;
+	cudaGetDevice(&deviceId);
+	cudaSetDevice(deviceId);
+	cudaDeviceGetAttribute(&numberOfSMs, cudaDevAttrMultiProcessorCount, deviceId);
+
+
+
+	int nbPas = int(std::log(std::min(int(free / 8 / 3 /4), int(pow(2.0, NB_PAS_MAX / 3.0)))) / std::log(2))*3;
+	if (nbPas <= 0)
+	{
+		std::cout << "Something went wrong...";
+		return -1;
+	}
 	std::ofstream rapport("tps_fct_mem.txt");
 	double tpsPre = 0;
-	long long int nbTest = NB_TEST;
+	long long int nbTest = 1;
 	int nbEltMax = int(pow(2.0, nbPas / 3.0));
 	double *tabA, *tabB, *tabC;
 	cudaMallocManaged(&tabA, sizeof(double) * nbEltMax);
@@ -87,6 +101,35 @@ int main() {
 	erreur = cudaGetLastError();
 	if (erreur != cudaSuccess)
 		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
+	double tps = 0;
+	while (tps<0.5)
+	{
+		nbTest *= 2;
+		int nbElt = NB_ELT * int(pow(2.0, 7 / 3.0));
+		initTab << <1, 1 >> > (tabA, 2.0, nbElt);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
+		initTab << <1, 1 >> > (tabB, 3.0, nbElt);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
+		initTab << <1, 1 >> > (tabC, 0, nbElt);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
+		double finPre;
+		double debut = getCpuTime();
+		addTestLoop << <1, 1 >> > (tabA, tabB, tabC, nbElt, nbTest);
+		cudaDeviceSynchronize();
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
+		finPre = getCpuTime();
+		tps = finPre - debut;
+
+	}
+	std::cout << "loop of" << nbTest <<std::endl;
 	for (int idx = 7; idx < nbPas;idx++)
 	{
 		
