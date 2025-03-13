@@ -2,11 +2,13 @@
 #include <fstream>
 #include <chrono>
 #include <cmath>
-#include  <cfloat>
+#include <cfloat>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
 
 #define NB_ELT 2
 #define NB_TEST 1000000ll
-#define NB_PAS 81
+#define NB_PAS_MAX 81
 #define TPS_MAX_PAR_TEST 10
 #define MIN_CLCK 1
 
@@ -51,22 +53,27 @@ __global__ void addTestLoop(double* tabA, double* tabB, double* tabC, int nbElt,
 int main() {
 	int deviceId;
 	int numberOfSMs;
-	int accessUM;
 	int deviceCount = 0;
 	cudaError_t erreur;
 	cudaGetDeviceCount(&deviceCount);
 
 	cudaGetDevice(&deviceId);
+	cudaSetDevice(deviceId);
 	cudaDeviceGetAttribute(&numberOfSMs, cudaDevAttrMultiProcessorCount, deviceId);
-	cudaDeviceGetAttribute(&accessUM, cudaDevAttrConcurrentManagedAccess, deviceId);
-	cudaDeviceGetAttribute(&accessUM, cudaDevAttrTotalConstantMemory, deviceId);
+	size_t free, total;
+	CUresult cuRes=cuMemGetInfo(&free, &total);
+	erreur = cudaGetLastError();
+	if (erreur != cudaSuccess)
+		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
+	std::cout << "free memory : " << free << "\n";
+	std::cout << "total memory : " << total << "\n";
 
-	int maxMem = NB_ELT *1024 * 256;
-	double pasMem = (std::log(maxMem) - std::log(NB_ELT))/ NB_PAS;
+
+	int nbPas = int(std::log(std::min(int(free / 48), int(pow(2.0, NB_PAS_MAX / 3.0)))) / std::log(2))*3;
 	std::ofstream rapport("tps_fct_mem.txt");
 	double tpsPre = 0;
 	long long int nbTest = NB_TEST;
-	int nbEltMax = NB_ELT * int(pow(2.0, NB_PAS / 3.0));
+	int nbEltMax = int(pow(2.0, nbPas / 3.0));
 	double *tabA, *tabB, *tabC;
 	cudaMallocManaged(&tabA, sizeof(double) * nbEltMax);
 	erreur = cudaGetLastError();
@@ -80,7 +87,7 @@ int main() {
 	erreur = cudaGetLastError();
 	if (erreur != cudaSuccess)
 		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
-	for (int idx = 7; idx < NB_PAS;idx++)
+	for (int idx = 7; idx < nbPas;idx++)
 	{
 		
 		int nbElt = NB_ELT * int(pow(2.0, idx / 3.0));
