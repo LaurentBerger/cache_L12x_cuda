@@ -53,12 +53,14 @@ int main() {
 	int numberOfSMs;
 	int accessUM;
 	int deviceCount = 0;
+	cudaError_t erreur;
 	cudaGetDeviceCount(&deviceCount);
 
 	cudaGetDevice(&deviceId);
 	cudaDeviceGetAttribute(&numberOfSMs, cudaDevAttrMultiProcessorCount, deviceId);
 	cudaDeviceGetAttribute(&accessUM, cudaDevAttrConcurrentManagedAccess, deviceId);
-	
+	cudaDeviceGetAttribute(&accessUM, cudaDevAttrTotalConstantMemory, deviceId);
+
 	int maxMem = NB_ELT *1024 * 256;
 	double pasMem = (std::log(maxMem) - std::log(NB_ELT))/ NB_PAS;
 	std::ofstream rapport("tps_fct_mem.txt");
@@ -67,15 +69,33 @@ int main() {
 	int nbEltMax = NB_ELT * int(pow(2.0, NB_PAS / 3.0));
 	double *tabA, *tabB, *tabC;
 	cudaMallocManaged(&tabA, sizeof(double) * nbEltMax);
+	erreur = cudaGetLastError();
+	if (erreur != cudaSuccess)
+		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 	cudaMallocManaged(&tabB, sizeof(double) * nbEltMax);
+	erreur = cudaGetLastError();
+	if (erreur != cudaSuccess)
+		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 	cudaMallocManaged(&tabC, sizeof(double) * nbEltMax);
+	erreur = cudaGetLastError();
+	if (erreur != cudaSuccess)
+		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 	for (int idx = 7; idx < NB_PAS;idx++)
 	{
 		
 		int nbElt = NB_ELT * int(pow(2.0, idx / 3.0));
 		initTab <<<1, 1 >>> (tabA, 2.0, nbElt);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 		initTab <<<1, 1 >>> (tabB, 3.0, nbElt);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 		initTab <<<1, 1 >>> (tabC, 0, nbElt);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 		double tpsParTest = 0;
 		if (tpsPre > TPS_MAX_PAR_TEST)
 			nbTest /= 2;
@@ -87,6 +107,9 @@ int main() {
 		double tpsMin = DBL_MAX;
 		addTestLoop <<<1, 1 >>> (tabA, tabB, tabC, nbElt, nbTest);
 		cudaDeviceSynchronize();
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 		finPre = getCpuTime();
 		double tps = finPre - debut;
 		tpsParTest = tps;
