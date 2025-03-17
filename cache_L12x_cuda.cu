@@ -6,10 +6,10 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
-#define NB_ELT 2
 #define NB_PAS_MAX 81
 #define TPS_MAX_PAR_TEST 1
 #define MIN_CLCK 1
+#define TYPEREEL float
 
 
 #ifdef _WIN32
@@ -34,13 +34,13 @@ inline double getCpuTime()
 #endif
 
 
-__global__ void initTab(double* tab, double val, int nbElt)
+__global__ void initTab(TYPEREEL* tab, TYPEREEL val, int nbElt)
 {
 	for (int idx = 0; idx < nbElt; idx++)
 		tab[idx] = val+idx;
 }
 
-__global__ void addTestLoop(double* tabA, double* tabB, double* tabC, int nbElt, int nbTest)
+__global__ void addTestLoop(TYPEREEL* tabA, TYPEREEL* tabB, TYPEREEL* tabC, int nbElt, int nbTest)
 {
 	for (long long int idxTest = 0; idxTest < nbTest; idxTest++)
 		for (int i = 0; i < nbElt; i++)
@@ -78,7 +78,7 @@ int main() {
 
 
 
-	int nbPas = int(std::log(std::min(int(free / 8 / 3 /4), int(pow(2.0, NB_PAS_MAX / 3.0)))) / std::log(2))*3;
+	int nbPas = int(std::log(std::min(int(free / sizeof(TYPEREEL) / 3 /4), int(pow(2.0, NB_PAS_MAX / 3.0)))) / std::log(2))*3;
 	if (nbPas <= 0)
 	{
 		std::cout << "Something went wrong...";
@@ -88,24 +88,24 @@ int main() {
 	double tpsPre = 0;
 	long long int nbTest = 1;
 	int nbEltMax = int(pow(2.0, nbPas / 3.0));
-	double *tabA, *tabB, *tabC;
-	cudaMallocManaged(&tabA, sizeof(double) * nbEltMax);
+	TYPEREEL*tabA, *tabB, *tabC;
+	cudaMallocManaged(&tabA, sizeof(TYPEREEL) * nbEltMax);
 	erreur = cudaGetLastError();
 	if (erreur != cudaSuccess)
 		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
-	cudaMallocManaged(&tabB, sizeof(double) * nbEltMax);
+	cudaMallocManaged(&tabB, sizeof(TYPEREEL) * nbEltMax);
 	erreur = cudaGetLastError();
 	if (erreur != cudaSuccess)
 		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
-	cudaMallocManaged(&tabC, sizeof(double) * nbEltMax);
+	cudaMallocManaged(&tabC, sizeof(TYPEREEL) * nbEltMax);
 	erreur = cudaGetLastError();
 	if (erreur != cudaSuccess)
 		std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 	double tps = 0;
-	while (tps<0.5)
+	while (tps< MIN_CLCK)
 	{
 		nbTest *= 2;
-		int nbElt = NB_ELT * int(pow(2.0, 7 / 3.0));
+		int nbElt = int(pow(2.0, 7 / 3.0));
 		initTab << <1, 1 >> > (tabA, 2.0, nbElt);
 		erreur = cudaGetLastError();
 		if (erreur != cudaSuccess)
@@ -133,7 +133,7 @@ int main() {
 	for (int idx = 7; idx < nbPas;idx++)
 	{
 		
-		int nbElt = NB_ELT * int(pow(2.0, idx / 3.0));
+		int nbElt = int(pow(2.0, idx / 3.0));
 		initTab <<<1, 1 >>> (tabA, 2.0, nbElt);
 		erreur = cudaGetLastError();
 		if (erreur != cudaSuccess)
@@ -151,11 +151,12 @@ int main() {
 			nbTest /= 2;
 		if (nbTest == 0)
 			nbTest = 1;
-		rapport << nbElt << "\t" << nbTest << "\t";
 		double finPre;
 		double debut = getCpuTime();
-		double tpsMin = DBL_MAX;
 		addTestLoop <<<1, 1 >>> (tabA, tabB, tabC, nbElt, nbTest);
+		erreur = cudaGetLastError();
+		if (erreur != cudaSuccess)
+			std::cout << "Error: " << cudaGetErrorString(erreur) << "\n";
 		cudaDeviceSynchronize();
 		erreur = cudaGetLastError();
 		if (erreur != cudaSuccess)
@@ -163,19 +164,21 @@ int main() {
 		finPre = getCpuTime();
 		double tps = finPre - debut;
 		tpsParTest = tps;
-		std::cout << "<-- " << nbElt << " -->\nDurée sans thread (" << tpsParTest << " ticks) ";
+		std::cout << "<-- " << nbElt * 3 * sizeof(TYPEREEL) << ", "  << nbElt << ", " << idx <<" -->\nDurée sans thread (" << tpsParTest << " ticks) ";
 		tpsPre = tps;
 		tpsParTest = tpsParTest  / nbTest;
 		std::cout << tpsParTest << "s (" << tpsParTest / nbElt << "s par élément) nbTest=" << nbTest<<"\n";
-		rapport << tpsParTest / nbElt << "\t" << tps << "\t" << tpsMin / nbElt ;
+		rapport << nbElt*3*sizeof(TYPEREEL) << "\t" << nbTest << "\t";
+		rapport << tpsParTest / nbElt << "\t" << tps;
 		rapport << "\n";
 		rapport.flush();
 
 	}
-	delete tabA;
-	delete tabB;
-	delete tabC;
+	cudaFree(tabA);
+	cudaFree(tabB);
+	cudaFree(tabC);
 	rapport.close();
+	std::cout << "\nEND\n";
     return 0;
 }
 
